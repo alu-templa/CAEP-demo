@@ -55,7 +55,7 @@ func NewCredentialChangeEvent(credType CredentialType, changeType ChangeType) *C
 		},
 	}
 
-	e.SetType(EventTypeAssuranceLevelChange)
+	e.SetType(EventTypeCredentialChange)
 
 	return e
 }

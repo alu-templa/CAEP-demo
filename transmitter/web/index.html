@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mock CAEP Transmitter</title>
+<style>
+  body { font: 14px/1.45 system-ui, sans-serif; max-width: 880px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+  h1 { margin-bottom: 0.25rem; }
+  h1 + p { color: #666; margin-top: 0; }
+  fieldset { border: 1px solid #ddd; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0; }
+  legend { padding: 0 0.5rem; color: #555; font-weight: 600; }
+  label { display: block; margin: 0.5rem 0 0.2rem; }
+  input, select, textarea { width: 100%; padding: 0.4rem; border: 1px solid #ccc; border-radius: 4px; font: inherit; box-sizing: border-box; }
+  button { padding: 0.5rem 1rem; background: #2754d4; color: #fff; border: 0; border-radius: 4px; font: inherit; cursor: pointer; }
+  button:hover { background: #1c3fa8; }
+  pre { background: #f5f5f5; padding: 0.6rem; border-radius: 4px; overflow: auto; max-height: 220px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  .status { padding: 0.5rem 0.75rem; border-radius: 4px; margin-top: 0.75rem; }
+  .status.ok { background: #e6f6ea; color: #1d5e2c; }
+  .status.err { background: #fdeaea; color: #8a1f1f; }
+  .muted { color: #777; }
+</style>
+</head>
+<body>
+
+<h1>Mock CAEP Transmitter</h1>
+<p>Push-based SSF transmitter for demoing <a href="https://openid.github.io/sharedsignals/openid-caep-1_0.html">CAEP</a> end-to-end.</p>
+
+<fieldset>
+  <legend>Registered Streams</legend>
+  <pre id="streams">loading…</pre>
+  <button type="button" onclick="loadStreams()">Refresh</button>
+</fieldset>
+
+<fieldset>
+  <legend>Trigger an Event</legend>
+  <form id="trigger">
+    <label>Stream</label>
+    <select name="stream_id" id="stream_id" required></select>
+
+    <label>Event Type</label>
+    <select name="event_type" required>
+      <option value="https://schemas.openid.net/secevent/caep/event-type/session-revoked">session-revoked</option>
+      <option value="https://schemas.openid.net/secevent/caep/event-type/credential-change">credential-change</option>
+      <option value="https://schemas.openid.net/secevent/caep/event-type/assurance-level-change">assurance-level-change</option>
+      <option value="https://schemas.openid.net/secevent/caep/event-type/device-compliance-change">device-compliance-change</option>
+      <option value="https://schemas.openid.net/secevent/caep/event-type/token-claims-change">token-claims-change</option>
+    </select>
+
+    <div class="row">
+      <div>
+        <label>Subject (email)</label>
+        <input name="email" value="alice@example.com" />
+      </div>
+      <div>
+        <label>Reason (optional)</label>
+        <input name="reason" placeholder="e.g. password reset" />
+      </div>
+    </div>
+
+    <p class="muted">Optional event-type-specific knobs are sent as JSON. Leave blank to use sensible defaults.</p>
+    <label>Extra fields (JSON, merged into request body)</label>
+    <textarea name="extra" rows="3" placeholder='{"credential_type":"fido2-roaming","change_type":"create"}'></textarea>
+
+    <p style="margin-top:1rem;"><button type="submit">Push event</button></p>
+    <div id="trigger-status"></div>
+  </form>
+</fieldset>
+
+<fieldset>
+  <legend>Verify Stream</legend>
+  <p class="muted">Sends an SSF verification SET. The receiver should echo the <code>state</code> back.</p>
+  <form id="verify">
+    <label>Stream</label>
+    <select name="stream_id" id="verify_stream_id" required></select>
+    <label>State</label>
+    <input name="state" value="hello-from-transmitter" />
+    <p style="margin-top:1rem;"><button type="submit">Send verification</button></p>
+    <div id="verify-status"></div>
+  </form>
+</fieldset>
+
+<script>
+async function loadStreams() {
+  const res = await fetch('/admin/streams');
+  const streams = await res.json();
+  document.getElementById('streams').textContent = JSON.stringify(streams, null, 2);
+
+  for (const id of ['stream_id', 'verify_stream_id']) {
+    const sel = document.getElementById(id);
+    const previous = sel.value;
+    sel.innerHTML = '';
+    for (const s of streams) {
+      const opt = document.createElement('option');
+      opt.value = s.stream_id;
+      opt.textContent = s.stream_id + ' → ' + s.endpoint_url + ' (' + s.status + ')';
+      sel.appendChild(opt);
+    }
+    if (previous) sel.value = previous;
+  }
+}
+
+function setStatus(elID, ok, msg) {
+  const el = document.getElementById(elID);
+  el.className = 'status ' + (ok ? 'ok' : 'err');
+  el.textContent = msg;
+}
+
+document.getElementById('trigger').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const body = {
+    stream_id: fd.get('stream_id'),
+    event_type: fd.get('event_type'),
+    email: fd.get('email') || undefined,
+    reason: fd.get('reason') || undefined,
+  };
+  const extra = (fd.get('extra') || '').trim();
+  if (extra) {
+    try { Object.assign(body, JSON.parse(extra)); }
+    catch (err) { return setStatus('trigger-status', false, 'invalid JSON in extra fields: ' + err.message); }
+  }
+  const res = await fetch('/admin/trigger', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  setStatus('trigger-status', res.ok, res.status + ' ' + text);
+});
+
+document.getElementById('verify').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const res = await fetch('/ssf/verify', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer demo-token',
+    },
+    body: JSON.stringify({
+      stream_id: fd.get('stream_id'),
+      state: fd.get('state'),
+    }),
+  });
+  const text = await res.text();
+  setStatus('verify-status', res.ok, res.status + ' ' + text);
+});
+
+loadStreams();
+setInterval(loadStreams, 5000);
+</script>
+
+</body>
+</html>
