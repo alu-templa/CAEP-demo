@@ -20,6 +20,41 @@ flow to the receiver in real time.
 
 ## Quick start
 
+### 0. Install Go (one-time setup)
+
+#### 0.1 macOS (Homebrew)
+
+```bash
+brew install go
+```
+
+### 0.1 Linux (apt or snap)
+
+```bash
+sudo apt update
+sudo apt install -y golang-go
+```
+
+### --- OR ---
+
+```bash
+sudo snap install go --classic
+```
+
+### 0.2 Confirm Go install (should return something like "go version go1.xx.x <os>/<arch>")
+
+```bash
+go version
+```
+
+### 0.3 Install dependencies
+
+```bash
+go mod tidy
+```
+
+### 1. Run the demo
+
 ```bash
 # terminal 1 — transmitter on :8080 (admin UI at /)
 cd transmitter && go run ./...
@@ -37,11 +72,11 @@ The receiver's terminal will print the parsed event.
 
 CAEP is a three-layer cake:
 
-| Layer    | Spec                       | What it gives you                                          |
-| -------- | -------------------------- | ---------------------------------------------------------- |
-| **SET**  | [RFC 8417](https://www.rfc-editor.org/rfc/rfc8417) | A JWT shape for delivering one security event |
-| **SSF**  | [OpenID Shared Signals Framework](https://openid.github.io/sharedsignals/openid-sharedsignals-framework-1_0.html) | The HTTP API and roles for managing event streams |
-| **CAEP** | [OpenID CAEP](https://openid.github.io/sharedsignals/openid-caep-1_0.html) | A vocabulary of access-related event types on top of SSF |
+| Layer    | Spec                                                                                                              | What it gives you                                        |
+| -------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| **SET**  | [RFC 8417](https://www.rfc-editor.org/rfc/rfc8417)                                                                | A JWT shape for delivering one security event            |
+| **SSF**  | [OpenID Shared Signals Framework](https://openid.github.io/sharedsignals/openid-sharedsignals-framework-1_0.html) | The HTTP API and roles for managing event streams        |
+| **CAEP** | [OpenID CAEP](https://openid.github.io/sharedsignals/openid-caep-1_0.html)                                        | A vocabulary of access-related event types on top of SSF |
 
 The motivating problem: an OAuth access token is normally issued for, say, an
 hour. If something bad happens in the meantime (session revoked, device falls
@@ -51,10 +86,10 @@ how to deliver them.
 
 ### Roles
 
-- **Transmitter** — the party that *knows about* security events (an IdP, an
+- **Transmitter** — the party that _knows about_ security events (an IdP, an
   MDM, a session manager). It owns a signing key, exposes a discovery
   document, and emits SETs.
-- **Receiver** — the party that *acts on* events (a relying party, a
+- **Receiver** — the party that _acts on_ events (a relying party, a
   resource server, a downstream gateway). It registers a stream with the
   transmitter, telling it which event types it wants and where to deliver them.
 
@@ -81,11 +116,12 @@ A SET is a JWT with a specific shape. Example, decoded:
 ```
 
 Notable things:
+
 - The JWT is signed with the transmitter's key (`ES256` in this demo). The
   receiver fetches `jwks_uri` from the discovery document to verify.
-- The `events` claim is a *map* keyed by an event-type URI. One SET = one
+- The `events` claim is a _map_ keyed by an event-type URI. One SET = one
   event in CAEP (multi-event SETs exist but are rarely used).
-- The `sub_id` is the subject the event is *about* — could be an email, a
+- The `sub_id` is the subject the event is _about_ — could be an email, a
   phone number, an opaque string, or a complex subject combining multiple
   identifiers (e.g., user + device).
 - The JWT header carries `typ: secevent+jwt` so receivers can tell SETs apart
@@ -93,7 +129,7 @@ Notable things:
 
 ### Stream lifecycle (SSF)
 
-A *stream* is the receiver's subscription. It has its own ID, status, list of
+A _stream_ is the receiver's subscription. It has its own ID, status, list of
 requested event types, and a delivery configuration.
 
 ```
@@ -136,13 +172,13 @@ endpoint on the transmitter that drains a per-stream queue.
 The five event types CAEP defines (all under
 `https://schemas.openid.net/secevent/caep/event-type/...`):
 
-| Event                       | Meaning                                                      |
-| --------------------------- | ------------------------------------------------------------ |
-| `session-revoked`           | A session has been terminated. Receiver should sign the user out. |
-| `credential-change`         | A credential was created/updated/deleted/revoked (password, FIDO key, etc.) |
-| `assurance-level-change`    | Authentication assurance changed (e.g., AAL2 → AAL1). |
-| `device-compliance-change`  | Device went compliant ↔ non-compliant. |
-| `token-claims-change`       | Claims attached to an existing token changed (e.g., role demotion). |
+| Event                      | Meaning                                                                     |
+| -------------------------- | --------------------------------------------------------------------------- |
+| `session-revoked`          | A session has been terminated. Receiver should sign the user out.           |
+| `credential-change`        | A credential was created/updated/deleted/revoked (password, FIDO key, etc.) |
+| `assurance-level-change`   | Authentication assurance changed (e.g., AAL2 → AAL1).                       |
+| `device-compliance-change` | Device went compliant ↔ non-compliant.                                      |
+| `token-claims-change`      | Claims attached to an existing token changed (e.g., role demotion).         |
 
 Each event payload carries common CAEP metadata: `event_timestamp`,
 `initiating_entity` (`admin` / `user` / `policy` / `system`), and human
@@ -152,13 +188,13 @@ reasons (`reason_admin`, `reason_user`).
 
 ## Repository layout
 
-| Path                    | Role                                                        |
-| ----------------------- | ----------------------------------------------------------- |
-| [`secevent/`](./secevent)        | Library: build, sign, parse, validate SETs (RFC 8417). |
-| [`ssfreceiver/`](./ssfreceiver)  | Library: receiver-side SSF — stream setup, push/poll, subjects, verify. |
-| [`transmitter/`](./transmitter)  | **Demo** mock transmitter. Implements the SSF management API + admin UI for triggering events. |
-| [`receiver/`](./receiver)        | **Demo** receiver binary. Wraps `ssfreceiver` + a `/events` HTTP handler. |
-| [`postman-collection/`](./postman-collection) | Postman collection documenting every transmitter endpoint. Useful as a spec reference. |
+| Path                                          | Role                                                                                           |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| [`secevent/`](./secevent)                     | Library: build, sign, parse, validate SETs (RFC 8417).                                         |
+| [`ssfreceiver/`](./ssfreceiver)               | Library: receiver-side SSF — stream setup, push/poll, subjects, verify.                        |
+| [`transmitter/`](./transmitter)               | **Demo** mock transmitter. Implements the SSF management API + admin UI for triggering events. |
+| [`receiver/`](./receiver)                     | **Demo** receiver binary. Wraps `ssfreceiver` + a `/events` HTTP handler.                      |
+| [`postman-collection/`](./postman-collection) | Postman collection documenting every transmitter endpoint. Useful as a spec reference.         |
 
 ---
 
@@ -192,6 +228,7 @@ go run ./...
 ```
 
 What it does on startup:
+
 1. Binds `/events` on `:9000` to handle incoming SETs.
 2. Calls `builder.Setup(ctx)` from the `ssfreceiver` library, which:
    - `GET /.well-known/ssf-configuration` — discover the transmitter's endpoints.
@@ -272,10 +309,12 @@ curl -X POST http://localhost:8080/ssf/status \
 ## Libraries (consumed by both demo binaries)
 
 ### [secevent](./secevent)
+
 Builds, signs, parses, and validates SETs per [RFC 8417](https://www.rfc-editor.org/rfc/rfc8417).
 Covers the CAEP and SSF event vocabularies and supports custom event types.
 
 ### [ssfreceiver](./ssfreceiver)
+
 Receiver-side SSF: stream creation, push/poll delivery, subject management,
 verification, status lifecycle.
 
